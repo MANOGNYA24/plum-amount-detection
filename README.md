@@ -41,17 +41,36 @@ Live demo: https://cosmos-pointing-earpiece.ngrok-free.dev (frontend) and https:
 
 ### Design decisions
 
-Rules run first; the LLM is optional and only used where rules are weak, such as amounts with no keyword (e.g. "Consultation 500") or fuzzy, OCR-damaged labels.
+I used rules first and kept the LLM optional. Most bills use the same few words
+("Total", "Paid", "Due", "Balance"), so keyword matching handles the common cases
+quickly, costs nothing, and it's easy to see why a number got a label. The
+service also works without an API key, which made testing much easier.
 
-The LLM cannot invent amounts. It receives the amounts already extracted, by index, and returns only a label per index. Output is schema-validated: unknown indices, invalid types, or malformed JSON are discarded and the rule result is kept.
+When the LLM is enabled, it only labels amounts. It gets the list of numbers the
+pipeline already found (by index) and returns a type for each one, so it has no
+way to add or change a number. If its response is malformed or uses an unknown
+type, I ignore it and keep the rule-based label.
 
-When a rule matches an exact keyword, the rule wins. If the LLM agrees, confidence goes up; if it disagrees, confidence goes down. The arithmetic check (`total - paid == due`) adjusts confidence the same way.
+I also used it as a second opinion. If a rule found an exact keyword, the rule
+wins, but the LLM agreeing or disagreeing moves the confidence up or down. The
+arithmetic check (total - paid = due) works the same way: when the numbers add
+up, I trust the result more.
 
-Each amount carries the exact source snippet as it appeared, including OCR errors (e.g. `ocr: 'T0tal: Rs l200'`), for auditability.
+Every amount keeps the exact text it came from, including OCR mistakes like
+'T0tal: Rs l200'. I wanted anyone reviewing the output to be able to check each
+number against the original document.
 
-Dates, times, phone numbers, and numbers labeled invoice no / UHID / qty are filtered out so they are not reported as money.
+Testing on a real hospital bill photo changed a lot of my approach. My first
+version treated serial numbers and quantities as amounts, fuzzy matching
+turned "Blood Count" into "discount", and Tesseract misread several digits. I
+fixed this by skipping small whole numbers with no money keyword, requiring
+fuzzy matches to share the first letter, and running OCR a few ways
+(including adaptive thresholding for uneven lighting) and keeping the most
+confident result. After that, every amount on the bill was read correctly and the arithmetic check passed (one label is still missed, see Limitations)
 
-If `GEMINI_API_KEY` is not set, or the LLM call fails, the pipeline runs fully rule-based.
+Guardrails like "no amounts found" return HTTP 200 with a status field, since
+the request itself was valid. Actual input problems (empty input, wrong file
+type, broken image) return proper 4xx errors.
 
 ### Confidence scores
 | Field | Meaning |
@@ -120,6 +139,8 @@ Amount types: `total_bill`, `paid`, `due`, `discount`, `tax`, `subtotal`, `other
 
 ### Examples
 
+Replace `localhost:8000` with the live demo URL to test the deployed version.
+
 Step 1: extract
 ```bash
 curl -X POST localhost:8000/api/v1/extract -H "Content-Type: application/json" \
@@ -177,7 +198,7 @@ Other guardrail reasons: `document too noisy` (OCR confidence < 0.30), `no reada
 Input errors return a proper HTTP status with `{"status":"error","reason":"..."}`: 400 (empty/missing input), 413 (too large), 415 (unsupported file type), 422 (undecodable image).
 
 ### All sample requests
-- `bash samples/requests.sh` (set `BASE=https://xxx.ngrok-free.app` to hit the deployed URL)
+- `bash samples/requests.sh` (set `BASE=https://cosmos-pointing-earpiece.ngrok-free.dev` to hit the deployed URL)
 - Postman: import `samples/postman_collection.json` and set the `base_url` variable
 - Regenerate sample images: `python samples/make_samples.py`
 
