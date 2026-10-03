@@ -4,6 +4,8 @@ FastAPI service that extracts financial amounts from medical bills and receipts,
 
 Problem Statement 4: OCR, Numeric Normalization, Context Classification.
 
+Live demo: https://cosmos-pointing-earpiece.ngrok-free.dev (frontend) and https://cosmos-pointing-earpiece.ngrok-free.dev/docs (API docs)
+
 ## Architecture
 
 ```
