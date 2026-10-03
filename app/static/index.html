@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Amount Detection</title>
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --card: #ffffff;
+    --border: #e3e5ea;
+    --text: #1c1e26;
+    --muted: #6b7280;
+    --accent: #4f46e5;
+    --accent-light: #eef2ff;
+    --green: #16a34a;
+    --amber: #d97706;
+    --red: #dc2626;
+    --purple: #7c3aed;
+    --gray: #6b7280;
+    --radius: 12px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #15171c;
+      --card: #1d2026;
+      --border: #2b2f38;
+      --text: #e7e8ea;
+      --muted: #9aa0ab;
+      --accent-light: #262a44;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 32px 20px 80px; }
+  header { margin-bottom: 24px; }
+  header h1 { font-size: 1.6rem; margin: 0 0 6px; }
+  header p { color: var(--muted); margin: 0; max-width: 680px; }
+  .pipeline-strip {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; font-size: 0.82rem; color: var(--muted);
+  }
+  .pipeline-strip span.node {
+    background: var(--accent-light); color: var(--accent); padding: 4px 10px;
+    border-radius: 999px; font-weight: 600;
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 20px 22px; box-shadow: var(--shadow); margin-bottom: 20px;
+  }
+  .card h2 { font-size: 1.05rem; margin: 0 0 4px; }
+  .card .explain { color: var(--muted); font-size: 0.88rem; margin: 0 0 14px; }
+  label.field-label { display: block; font-size: 0.82rem; font-weight: 600; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.03em; }
+  textarea {
+    width: 100%; min-height: 90px; padding: 12px; border: 1px solid var(--border); border-radius: 8px;
+    font-family: inherit; font-size: 0.95rem; resize: vertical; background: var(--bg); color: var(--text);
+  }
+  textarea:focus, input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .samples { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 18px; }
+  .btn {
+    cursor: pointer; border: 1px solid var(--border); background: var(--card); color: var(--text);
+    padding: 8px 14px; border-radius: 8px; font-size: 0.85rem; font-weight: 500; transition: all .12s;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-primary {
+    background: var(--accent); border-color: var(--accent); color: white; font-weight: 600;
+    padding: 10px 22px; font-size: 0.95rem;
+  }
+  .btn-primary:hover { background: #4338ca; color: white; }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-ghost { background: transparent; }
+  .upload-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 4px; }
+  .upload-row input[type=file] { font-size: 0.85rem; }
+  #imgPreview { max-height: 90px; border-radius: 8px; border: 1px solid var(--border); display: none; }
+  .note { font-size: 0.78rem; color: var(--muted); margin-top: 6px; }
+  .divider-or { text-align: center; color: var(--muted); font-size: 0.78rem; margin: 14px 0; position: relative; }
+  .divider-or::before, .divider-or::after {
+    content: ""; display: inline-block; width: 40%; height: 1px; background: var(--border);
+    vertical-align: middle; margin: 0 8px;
+  }
+  .actions { display: flex; align-items: center; gap: 14px; margin-top: 18px; }
+  .spinner {
+    width: 16px; height: 16px; border: 2px solid var(--accent-light); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin .7s linear infinite; display: none;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .banner {
+    padding: 14px 18px; border-radius: 10px; margin-bottom: 20px; font-size: 0.92rem; display: none;
+    border: 1px solid transparent;
+  }
+  .banner.warn { background: #fef9e7; border-color: #f5d76e; color: #7a5c00; }
+  .banner.error { background: #fdecec; border-color: #f5a3a3; color: #8a1f1f; }
+  @media (prefers-color-scheme: dark) {
+    .banner.warn { background: #3a3419; color: #f0d878; }
+    .banner.error { background: #3a1f1f; color: #f5a3a3; }
+  }
+  .banner strong { display: block; margin-bottom: 2px; }
+  #results { display: none; }
+  .step-card { position: relative; }
+  .step-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 2px; }
+  .step-num {
+    background: var(--accent); color: white; font-weight: 700; font-size: 0.78rem;
+    width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center;
+    justify-content: center; flex-shrink: 0;
+  }
+  .connector { width: 1px; height: 14px; background: var(--border); margin: -8px auto 6px; }
+  .chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+  .chip {
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.82rem; background: var(--bg);
+    border: 1px solid var(--border); padding: 3px 9px; border-radius: 6px;
+  }
+  .chip.mistake {
+    background: #fff1e0; border-color: #f0b35c; color: #8a4b00;
+  }
+  @media (prefers-color-scheme: dark) { .chip.mistake { background: #3a2a10; color: #f0b35c; } }
+  .kv-row { display: flex; gap: 18px; font-size: 0.86rem; color: var(--muted); margin: 6px 0 2px; flex-wrap: wrap;}
+  .kv-row b { color: var(--text); }
+  .bar-wrap { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+  .bar { flex: 1; max-width: 220px; height: 8px; background: var(--bg); border-radius: 999px; overflow: hidden; border: 1px solid var(--border); }
+  .bar-fill { height: 100%; border-radius: 999px; transition: width .4s; }
+  .bar-num { font-size: 0.78rem; color: var(--muted); font-family: ui-monospace, monospace; min-width: 34px; }
+  table.amt-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.88rem; }
+  table.amt-table th { text-align: left; color: var(--muted); font-weight: 600; font-size: 0.76rem; text-transform: uppercase; letter-spacing: .03em; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  table.amt-table td { padding: 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  table.amt-table tr:last-child td { border-bottom: none; }
+  .type-badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 0.78rem; font-weight: 600; background: var(--accent-light); color: var(--accent); }
+  .method-badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 0.74rem; font-weight: 600; text-transform: uppercase; }
+  .method-exact { background: #e6f6ea; color: var(--green); }
+  .method-fuzzy { background: #fef3e0; color: var(--amber); }
+  .method-llm   { background: #f1e8fe; color: var(--purple); }
+  .method-none  { background: #f0f1f3; color: var(--gray); }
+  @media (prefers-color-scheme: dark) {
+    .method-exact { background: #163822; } .method-fuzzy { background: #3a2e12; }
+    .method-llm { background: #2c2140; } .method-none { background: #2a2c31; }
+  }
+  .source-snip { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.82rem; color: var(--muted); }
+  .arith-line { margin-top: 12px; padding: 10px 12px; border-radius: 8px; font-size: 0.86rem; display: flex; align-items: center; gap: 8px; }
+  .arith-pass { background: #e6f6ea; color: #116330; }
+  .arith-fail { background: #fdecec; color: #8a1f1f; }
+  .arith-na { background: var(--bg); color: var(--muted); }
+  @media (prefers-color-scheme: dark) {
+    .arith-pass { background: #163822; color: #a4e8bd; } .arith-fail { background: #3a1f1f; color: #f5a3a3; }
+  }
+  details.raw { margin-top: 10px; }
+  details.raw summary { cursor: pointer; font-weight: 600; font-size: 0.9rem; color: var(--accent); padding: 4px 0; }
+  pre.json-block {
+    background: #0d1117; color: #c9d1d9; padding: 14px; border-radius: 8px; overflow-x: auto;
+    font-size: 0.78rem; line-height: 1.5; margin-top: 10px;
+  }
+  .final-currency { font-size: 0.9rem; margin-bottom: 4px; }
+  .footnote { color: var(--muted); font-size: 0.8rem; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Amount Detection</h1>
+    <p>Extracts and labels monetary amounts from medical bills (text or image).</p>
+    <div class="pipeline-strip">
+      <span class="node">1. OCR</span>
+      <span class="node">2. Normalize</span>
+      <span class="node">3. Classify</span>
+      <span class="node">4. Final JSON</span>
+    </div>
+  </header>
+
+  <div class="card">
+    <h2>Input</h2>
+    <p class="explain">Enter bill text, select a sample, or upload an image.</p>
+
+    <label class="field-label" for="textInput">Bill text</label>
+    <textarea id="textInput" placeholder="e.g. Total: INR 1200 | Paid: 1000 | Due: 200"></textarea>
+
+    <div class="samples">
+      <button class="btn" onclick="loadSample('clean')">Sample: clean text</button>
+      <button class="btn" onclick="loadSample('noisy')">Sample: noisy OCR text</button>
+      <button class="btn" onclick="loadSample('none')">Sample: no amounts</button>
+    </div>
+
+    <div class="divider-or">or upload an image</div>
+
+    <label class="field-label" for="fileInput">Bill image</label>
+    <div class="upload-row">
+      <input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp,image/bmp,image/tiff">
+      <img id="imgPreview" alt="preview">
+      <button class="btn btn-ghost" id="clearFileBtn" style="display:none" onclick="clearFile()">Remove image</button>
+    </div>
+    <p class="note">If an image is selected, it is analyzed instead of the text above.</p>
+
+    <div class="actions">
+      <button class="btn-primary" id="analyzeBtn" onclick="analyze()">Analyze</button>
+      <div class="spinner" id="spinner"></div>
+      <span id="statusText" class="footnote"></span>
+    </div>
+  </div>
+
+  <div class="banner warn" id="warnBanner"></div>
+  <div class="banner error" id="errorBanner"></div>
+
+  <div id="results">
+
+    <div class="card step-card">
+      <div class="step-head"><span class="step-num">1</span><h2>Step 1: Text extraction (OCR)</h2></div>
+      <p class="explain">Extracts raw text and numeric tokens from the input.</p>
+      <div class="kv-row"><span>Currency detected: <b id="s1-currency">-</b></span></div>
+      <div class="bar-wrap"><span class="footnote" style="min-width:110px">OCR confidence</span><div class="bar"><div class="bar-fill" id="s1-bar"></div></div><span class="bar-num" id="s1-num"></span></div>
+      <label class="field-label" style="margin-top:12px">Raw tokens found</label>
+      <div class="chip-row" id="s1-tokens"></div>
+      <p class="footnote">Highlighted tokens contain OCR-lookalike characters (like <code>l</code>, <code>O</code>, <code>S</code>) that step 2 corrects.</p>
+    </div>
+    <div class="connector"></div>
+
+    <div class="card step-card">
+      <div class="step-head"><span class="step-num">2</span><h2>Step 2: Normalization</h2></div>
+      <p class="explain">Converts tokens into numeric values and corrects OCR digit errors (e.g. "l" -> "1").</p>
+      <div class="bar-wrap"><span class="footnote" style="min-width:110px">Normalization confidence</span><div class="bar"><div class="bar-fill" id="s2-bar"></div></div><span class="bar-num" id="s2-num"></span></div>
+      <label class="field-label" style="margin-top:12px">Raw -> corrected</label>
+      <div class="chip-row" id="s2-map"></div>
+    </div>
+    <div class="connector"></div>
+
+    <div class="card step-card">
+      <div class="step-head"><span class="step-num">3</span><h2>Step 3: Classification</h2></div>
+      <p class="explain">Labels each amount using nearby words: exact keyword match, fuzzy match, or the optional AI step.</p>
+      <table class="amt-table" id="s3-table">
+        <thead><tr><th>Value</th><th>Label</th><th>Matched via</th><th>Confidence</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="arith-line" id="arith-line"></div>
+    </div>
+    <div class="connector"></div>
+
+    <div class="card step-card">
+      <div class="step-head"><span class="step-num">4</span><h2>Step 4: Final output</h2></div>
+      <p class="explain">Amounts with type, value, and source text for each entry.</p>
+      <div class="final-currency">Currency: <b id="s4-currency">-</b></div>
+      <table class="amt-table" id="s4-table">
+        <thead><tr><th>Type</th><th>Value</th><th>Source snippet</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <details class="raw">
+      <summary>Raw JSON response</summary>
+      <pre class="json-block" id="rawJson"></pre>
+    </details>
+  </div>
+
+</div>
+
+<script>
+const SAMPLES = {
+  clean: "Total: INR 1200 | Paid: 1000 | Due: 200 | Discount: 10%",
+  noisy: "T0tal: Rs l200 | Pald: 1000 | Due: 200",
+  none: "Thank you for visiting",
+};
+
+const DIGIT_FIXES = {O:"0", o:"0", I:"1", l:"1", "|":"1", S:"5"};
+
+function fixDigits(tok) {
+  const pct = tok.endsWith("%");
+  const body = pct ? tok.slice(0, -1) : tok;
+  const fixed = body.split("").map(c => DIGIT_FIXES[c] ?? c).join("");
+  return fixed + (pct ? "%" : "");
+}
+function hasMistake(tok) { return fixDigits(tok) !== tok; }
+
+function loadSample(key) {
+  document.getElementById("textInput").value = SAMPLES[key];
+  clearFile();
+}
+
+const fileInput = document.getElementById("fileInput");
+const imgPreview = document.getElementById("imgPreview");
+const clearFileBtn = document.getElementById("clearFileBtn");
+
+fileInput.addEventListener("change", () => {
+  const f = fileInput.files[0];
+  if (!f) { clearFile(); return; }
+  imgPreview.src = URL.createObjectURL(f);
+  imgPreview.style.display = "inline-block";
+  clearFileBtn.style.display = "inline-block";
+});
+
+function clearFile() {
+  fileInput.value = "";
+  imgPreview.style.display = "none";
+  clearFileBtn.style.display = "none";
+}
+
+function barColor(c) {
+  if (c >= 0.8) return "#16a34a";
+  if (c >= 0.5) return "#d97706";
+  return "#dc2626";
+}
+function setBar(barEl, numEl, value) {
+  const pct = Math.round(Math.max(0, Math.min(1, value)) * 100);
+  barEl.style.width = pct + "%";
+  barEl.style.background = barColor(value);
+  numEl.textContent = value.toFixed(2);
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+function hide(el) { el.style.display = "none"; }
+function show(el, mode) { el.style.display = mode || "block"; }
+
+async function analyze() {
+  const text = document.getElementById("textInput").value.trim();
+  const file = fileInput.files[0];
+  if (!file && !text) {
+    alert("Please enter bill text or upload an image first.");
+    return;
+  }
+
+  const btn = document.getElementById("analyzeBtn");
+  const spinner = document.getElementById("spinner");
+  const statusText = document.getElementById("statusText");
+  const originalLabel = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Analyzing...";
+  show(spinner, "inline-block");
+  statusText.textContent = "Analyzing...";
+  hide(document.getElementById("warnBanner"));
+  hide(document.getElementById("errorBanner"));
+  hide(document.getElementById("results"));
+
+  try {
+    let resp;
+    if (file) {
+      const fd = new FormData();
+      fd.append("file", file);
+      resp = await fetch("/api/v1/detect?debug=true", { method: "POST", body: fd });
+    } else {
+      resp = await fetch("/api/v1/detect?debug=true", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+    }
+    const data = await resp.json();
+    render(data, resp.status);
+    document.getElementById("results").scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch (err) {
+    const b = document.getElementById("errorBanner");
+    b.innerHTML = `<strong>Network / server error</strong>${escapeHtml(err.message)}`;
+    show(b);
+    b.scrollIntoView({ behavior: "smooth", block: "start" });
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+    hide(spinner);
+    statusText.textContent = "";
+  }
+}
+
+function render(data, httpStatus) {
+  document.getElementById("rawJson").textContent = JSON.stringify(data, null, 2);
+  // The results container itself is `display:none` until here -- every branch
+  // below (error / guardrail / ok) needs it visible, so show it once, up front.
+  show(document.getElementById("results"));
+
+  if (data.status === "error") {
+    const b = document.getElementById("errorBanner");
+    b.innerHTML = `<strong>Error (HTTP ${httpStatus})</strong>${escapeHtml(data.reason || "unknown error")}`;
+    show(b);
+    document.querySelectorAll(".step-card, .connector").forEach(hide);
+    return;
+  }
+
+  if (data.status !== "ok") {
+    // guardrail, e.g. no_amounts_found
+    const b = document.getElementById("warnBanner");
+    b.innerHTML = `<strong>No amounts detected (${escapeHtml(data.status)})</strong>${escapeHtml(data.reason || "")}`;
+    show(b);
+    document.querySelectorAll(".step-card, .connector").forEach(hide);
+    return;
+  }
+
+  document.querySelectorAll(".step-card, .connector").forEach(el => show(el));
+
+  const steps = data.steps || {};
+  const s1 = steps.step1_ocr, s2 = steps.step2_normalization, s3 = steps.step3_classification;
+  const dbg = data.debug || {};
+
+  // ---- Step 1 ----
+  document.getElementById("s1-currency").textContent = s1.currency_hint || "none detected";
+  setBar(document.getElementById("s1-bar"), document.getElementById("s1-num"), s1.confidence);
+  const tokBox = document.getElementById("s1-tokens");
+  tokBox.innerHTML = "";
+  s1.raw_tokens.forEach(tok => {
+    const chip = document.createElement("span");
+    chip.className = "chip" + (hasMistake(tok) ? " mistake" : "");
+    chip.textContent = tok;
+    tokBox.appendChild(chip);
+  });
+
+  // ---- Step 2 ---- (best-effort positional pairing: raw tokens minus '%' ones, in order)
+  const nonPercentTokens = s1.raw_tokens.filter(t => !t.endsWith("%"));
+  setBar(document.getElementById("s2-bar"), document.getElementById("s2-num"), s2.normalization_confidence);
+  const mapBox = document.getElementById("s2-map");
+  mapBox.innerHTML = "";
+  const normalized = s2.normalized_amounts;
+  for (let i = 0; i < Math.min(nonPercentTokens.length, normalized.length); i++) {
+    const raw = nonPercentTokens[i], fixed = normalized[i];
+    const chip = document.createElement("span");
+    const changed = String(raw) !== String(fixed);
+    chip.className = "chip" + (changed ? " mistake" : "");
+    chip.textContent = changed ? `${raw} -> ${fixed}` : `${raw} (no change needed)`;
+    mapBox.appendChild(chip);
+  }
+
+  // ---- Step 3 ----
+  const perAmount = dbg.per_amount || [];
+  const s3Body = document.querySelector("#s3-table tbody");
+  s3Body.innerHTML = "";
+  perAmount.forEach(item => {
+    const tr = document.createElement("tr");
+    const methodClass = "method-" + (item.method || "none");
+    tr.innerHTML = `
+      <td><b>${escapeHtml(item.value)}</b></td>
+      <td><span class="type-badge">${escapeHtml(item.type)}</span><br><span class="footnote">matched: "${escapeHtml(item.label)}"</span></td>
+      <td><span class="method-badge ${methodClass}">${escapeHtml(item.method)}</span></td>
+      <td></td>`;
+    const confCell = tr.children[3];
+    const wrap = document.createElement("div");
+    wrap.className = "bar-wrap";
+    const bar = document.createElement("div"); bar.className = "bar";
+    const fill = document.createElement("div"); fill.className = "bar-fill";
+    const num = document.createElement("span"); num.className = "bar-num";
+    bar.appendChild(fill); wrap.appendChild(bar); wrap.appendChild(num);
+    confCell.appendChild(wrap);
+    setBar(fill, num, item.confidence);
+    s3Body.appendChild(tr);
+  });
+
+  const arithEl = document.getElementById("arith-line");
+  const check = dbg.arithmetic_check;
+  arithEl.className = "arith-line " + (check === "passed" ? "arith-pass" : check === "failed" ? "arith-fail" : "arith-na");
+  const msg = check === "passed" ? "Arithmetic check passed: total - paid = due."
+            : check === "failed" ? "Arithmetic check failed: total - paid does not equal due."
+            : "Arithmetic check not applicable: total, paid, and due were not all found.";
+  arithEl.textContent = msg;
+
+  // ---- Step 4 ----
+  document.getElementById("s4-currency").textContent = data.currency || "none detected";
+  const s4Body = document.querySelector("#s4-table tbody");
+  s4Body.innerHTML = "";
+  data.amounts.forEach(a => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><span class="type-badge">${escapeHtml(a.type)}</span></td>
+      <td><b>${escapeHtml(a.value)}</b></td>
+      <td class="source-snip">${escapeHtml(a.source)}</td>`;
+    s4Body.appendChild(tr);
+  });
+}
+</script>
+</body>
+</html>
